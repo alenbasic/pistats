@@ -1,0 +1,59 @@
+#! /usr/bin/python3
+import sys, os, sqlite3, shutil, psutil #you can download psutil via pip install
+
+DATABASE_FILE = 'FILE_LOCATION_HERE'
+
+DATABASE_EXISTS = os.path.isfile(DATABASE_FILE)
+
+TABLE_CREATION_SCRIPT = 'CREATE TABLE stats \
+    (cpu_usage text,\
+    memory_usage real, \
+    temperature real,\
+    date text\
+    )'
+
+
+TABLE_INSERTION_SCRIPT = "INSERT INTO stats VALUES (?,?,?,datetime('now','localtime'))"
+ 
+conn = sqlite3.connect(DATABASE_FILE)
+c = conn.cursor()
+
+# pushover stuff below
+
+USER_TOKEN = 'USER_TOKEN_HERE'
+APP_TOKEN = 'API_TOKEN_HERE'
+
+def send_pushover_notification(title, message, priority='1'):
+    data = {'token': APP_TOKEN, 'user': USER_TOKEN, 'title': title, 'message': message, 'priority': priority}
+    r = requests.post('https://api.pushover.net/1/messages.json', data=data, headers={'User-Agent': 'Python'})
+
+# pushover stuff above
+
+def create_database():
+    c.execute(TABLE_CREATION_SCRIPT)
+    conn.commit()
+
+def insert_data(script, values):
+    c.execute(script, values)
+    conn.commit()
+
+
+def print_sys_info():
+    print('CPU Usage: {}%, {}%, {}%, {}%'.format(*psutil.cpu_percent(interval=1,percpu=True)))
+    print('Memory Usage: {}%'.format(psutil.virtual_memory()[2]))
+    print('CPU Temperature: {}°c'.format(list(psutil.sensors_temperatures()['cpu-thermal'][0])[1]))
+
+if len(sys.argv) > 1:
+    if sys.argv[1].lower() == 'show':
+        print_sys_info()
+        exit()
+
+if DATABASE_EXISTS:
+    insert_data(TABLE_INSERTION_SCRIPT,(str(psutil.cpu_percent(interval=1,percpu=True)).strip('[]'),psutil.virtual_memory()[2],psutil.sensors_temperatures()['cpu-thermal'][0][1]))
+else:
+    create_database()
+    insert_data(TABLE_INSERTION_SCRIPT,(str(psutil.cpu_percent(interval=1,percpu=True)).strip('[]'),psutil.virtual_memory()[2],psutil.sensors_temperatures()['cpu-thermal'][0][1]))
+
+
+conn.close()
+shutil.copyfile(DATABASE_FILE, 'SERVER_FILE_LOCATION_HERE')
